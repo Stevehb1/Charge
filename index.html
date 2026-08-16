@@ -118,14 +118,17 @@ overcharging about 25p.</p>
 </div>
 <div class="card">
 <h2 style="margin-bottom:8px">If Axle has called an event</h2>
-<p class="cap">The charge percentage above does not change. What changes is how much you stop the battery
-selling during the 16:00&ndash;19:00 peak, because after that it is normally empty and you can only
-import at 6 kW.</p>
-<table class="lk" style="table-layout:auto"><thead><tr><th>Event starts</th><th>Hold back (1 h)</th><th>Hold back (2 h)</th></tr></thead>
-<tbody><tr><th>19:00 or earlier</th><td>6 kWh</td><td>12 kWh</td></tr><tr><th>19:30</th><td>3 kWh</td><td>9 kWh</td></tr><tr><th>20:00</th><td>1 kWh</td><td>7 kWh</td></tr><tr><th>20:30 or later</th><td>none — top up from the grid</td><td>4 kWh</td></tr></tbody></table>
-<p class="cap" style="margin-top:12px">On a bright day the battery often still holds 2&ndash;5 kWh at 19:00,
-so you may need less than this. Holding 6 kWh back costs about &pound;1.63 of lost peak export against an
-event paying about &pound;6 &mdash; worth it on a called day, never as a standing habit.</p>
+<p class="cap">The overnight charge percentage above does not change. Two things do.</p>
+<p class="cap" style="color:var(--text-secondary)"><b>1. Have the battery at 45% when the event starts</b>
+&mdash; or 80% for a two-hour event. That is the deliverable energy it needs at 6 kW.</p>
+<p class="cap" style="color:var(--text-secondary)"><b>2. Stop the 16:00&ndash;19:00 peak taking it below this floor</b>,
+because after 19:00 you can only refill at 6 kW:</p>
+<table class="lk" style="table-layout:auto"><thead><tr><th>Event starts</th><th>Floor (1 h)</th><th>Floor (2 h)</th></tr></thead>
+<tbody><tr><th>19:00 or earlier</th><td>45%</td><td>80%</td></tr><tr><th>19:30</th><td>30%</td><td>65%</td></tr><tr><th>20:00</th><td>15%</td><td>50%</td></tr><tr><th>20:30</th><td>none</td><td>35%</td></tr><tr><th>21:00</th><td>none</td><td>20%</td></tr><tr><th>21:30 or later</th><td>none</td><td>none</td></tr></tbody></table>
+<p class="cap" style="margin-top:12px">&ldquo;None&rdquo; means let the peak run normally &mdash; there is time to
+import the lot afterwards. On a bright day the battery often still holds 2&ndash;5 kWh at 19:00, so the floor can be
+lower than shown. Holding 6 kWh back costs about &pound;1.63 of lost peak export against an event paying about
+&pound;6 &mdash; worth it on a called day, never as a standing habit.</p>
 </div>
 <div class="card"><p class="cap" style="margin:0"><b>Not seeing the calculator?</b> This page has an
 interactive version with a slider and a chart, but it only appears when JavaScript runs. On an iPhone
@@ -344,33 +347,51 @@ function axle(){
   $("axbody").hidden = !on;
   if (!on) return;
   var r = row(), st = parseFloat($("axstart").value), du = parseFloat($("axdur").value);
-  var need = EVKW * du;
-  var free = Math.min(r.s19 || 0, MAXAC);
-  var imp  = Math.max(0, st - 19) * EVKW * RT;
+  var CAP = 18.08, RES = 10;                       // kWh usable, % reserve floor
+  var need = EVKW * du;                            // kWh the event wants delivered
+  var free = Math.min(r.s19 || 0, MAXAC);          // already in the battery at 19:00
+  var imp  = Math.max(0, st - 19) * EVKW * RT;     // deliverable kWh you could import in time
   var topup = Math.min(imp, Math.max(0, need - free));
   var hold = Math.min(Math.max(0, need - free - imp), Math.max(0, MAXAC - free));
   var del  = Math.min(need, free + imp + hold);
   var cost = (topup / RT) * 0.244 + hold * 0.2717;
   var mins = Math.round((topup / RT) / EVKW * 60);
+  // convert kWh of deliverable energy into a state-of-charge percentage
+  var pct = function(kwh){ return Math.min(100, Math.ceil((RES + (kwh / 0.95) / CAP * 100) / 5) * 5); };
+  var target = pct(del);                           // where the battery must be when it starts
+  var floor  = hold > 0.05 ? pct(hold) : 0;        // how low the peak may take it
+
   var lines = [];
-  if (hold > 0.05)
-    lines.push("Hold <b style='display:inline'>" + hold.toFixed(1) + " kWh</b> back through the 16:00–19:00 peak — "
-      + (st <= 19 ? "there is no time to import once it starts." : "half an hour of importing is not enough."));
+  if (floor)
+    lines.push("<b style='display:inline'>Stop the peak discharging below " + floor + "%</b> from 16:00 — "
+      + (st <= 19 ? "there is no time to import once it starts."
+                  : "there is not enough time to import the whole lot."));
   else
-    lines.push("Let the peak run as normal — no need to hold anything back.");
+    lines.push("Let the 16:00–19:00 peak run as normal — no floor needed.");
   if (topup > 0.05)
-    lines.push("Top up <b style='display:inline'>" + topup.toFixed(1) + " kWh</b> from the grid before it starts (about "
+    lines.push("Then charge to <b style='display:inline'>" + target + "%</b> before it starts (about "
       + mins + " min at 6 kW).");
   if (free > 0.05)
-    lines.push("The battery should still hold about " + free.toFixed(1) + " kWh at 19:00 on this forecast, which counts towards it.");
+    lines.push("On this forecast about " + free.toFixed(1) + " kWh should still be in the battery at 19:00, "
+      + "which counts towards it.");
+
+  var stored = target / 100 * CAP;
   $("axout").innerHTML =
-    '<div class="act"><b>Charge target stays at ' + r.h + '%</b>'
-    + '<div class="sm">An event does not change what you charge to overnight — only what the battery does at teatime.</div></div>'
+    '<div class="act" style="text-align:center">'
+    + '<div class="lab" style="font-size:12px;font-weight:600;letter-spacing:.06em;'
+    + 'text-transform:uppercase;color:var(--good)">Battery at '
+    + Math.floor(st) + (st % 1 ? ":30" : ":00") + ' must be</div>'
+    + '<div style="font-size:52px;line-height:1.05;font-weight:700;color:var(--good);'
+    + 'font-variant-numeric:tabular-nums;margin:2px 0">' + target + '%</div>'
+    + '<div class="sm">about ' + stored.toFixed(1) + ' kWh showing on the battery — '
+    + del.toFixed(1) + ' kWh of that is deliverable above the 10% reserve, '
+    + 'enough for ' + du + (du > 1 ? " hours" : " hour") + ' at 6 kW.</div></div>'
     + '<div class="act" style="background:transparent;border-color:var(--border)">'
     + '<div class="sm">' + lines.join("<br>") + '</div>'
-    + '<div class="amt">Delivers about ' + del.toFixed(1) + ' kWh → pays ' + gbp(del)
-    + (cost > 0.005 ? ', costs ' + gbp(cost) + ' to prepare, net <b style="display:inline">' + gbp(del - cost) + '</b>'
-                    : ', at no cost to prepare')
+    + '<div class="amt">Overnight charge target is unchanged at ' + r.h
+    + '%. Pays ' + gbp(del)
+    + (cost > 0.005 ? ', costs ' + gbp(cost) + ' to prepare, net <b style="display:inline">'
+                      + gbp(del - cost) + '</b>' : ', at no cost to prepare')
     + '</div></div>';
 }
 ["axon","axstart","axdur"].forEach(function(id){

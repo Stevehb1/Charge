@@ -8,7 +8,7 @@ Built for a specific system — an 18.08 kWh Sigenergy battery with a split east
 solar array in West Yorkshire, on the Octopus Flux tariff. The numbers are fitted to
 that installation and won't transfer to another one without recalculating.
 
-Live at: `https://<username>.github.io/charge/`
+Live at: `https://stevehb1.github.io/charge/`
 
 ## Why it isn't just "charge it full"
 
